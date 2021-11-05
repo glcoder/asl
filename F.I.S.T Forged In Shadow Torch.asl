@@ -1,31 +1,84 @@
 state("ZingangGame-Win64-Shipping", "Steam")
 {
-    // 0x7E69170 - GWorldProxy -> UWorld
-    // 0x118 - AGameMode
-    // 0x180 - UGameInstance
-
-    //uint GameModeType: 0x7E69170, 0x118, 0x10, 0x18;
-    ulong PawnAddress: 0x7E69170, 0x180, 0x38, 0x0, 0x30, 0x250;
-
-    // InGameTime = LastSavedGameTime + RealTime - LastSavedRealTime
-    float RealTime: 0x7E69170, 0x5A0;
-    /*
-    float LastSavedRealTime: 0x7E69170, 0x180, 0x4C4;
-    float LastSavedGameTime: 0x7E69170, 0x180, 0x4C0;
-    float LoadingDelta: 0x7E69170, 0x180, 0x448, 0x320;
-
-    int SkillRecover: 0x7E69170, 0x180, 0x3A8, 0x2C8, 0x00;
-    int SkillBlocking: 0x7E69170, 0x180, 0x3A8, 0x2C8, 0x08;
-    int SkillMissile: 0x7E69170, 0x180, 0x3A8, 0x2C8, 0x10;
-    int SkillPuppet: 0x7E69170, 0x180, 0x3A8, 0x2C8, 0x18;
-    */
 }
 
 init
 {
-    vars.ProgressFlagManagerPtr = new DeepPointer(0x7E69170, 0x180, 0x358, 0x50);
-    vars.ActiveAbilityNameSetPtr = new DeepPointer(0x7E69170, 0x180, 0x3A0, 0xC8);
-    vars.ActiveComboDefinitionsPtr = new DeepPointer(0x7E69170, 0x180, 0x3A0, 0x118);
+    Func<string, int, IntPtr> FindSignaturePointer = (string Signature, int OffsetPosition) => {
+        var Scanner = new SignatureScanner(game, modules.First().BaseAddress, modules.First().ModuleMemorySize);
+        IntPtr Pointer = Scanner.Scan(new SigScanTarget(Signature));
+        if (Pointer != IntPtr.Zero)
+        {
+            var Offset = memory.ReadValue<int>(IntPtr.Add(Pointer, OffsetPosition));
+            Pointer = IntPtr.Add(Pointer, Offset + OffsetPosition + sizeof(int));
+        }
+        return Pointer;
+    };
+
+    IntPtr GNames = FindSignaturePointer("48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 0F 10 03 4C 8D 44 24 20 48 8B C8", 3);
+    print("GNames = " + GNames.ToString("X16"));
+
+    IntPtr GEngine = FindSignaturePointer("48 8B 3D ?? ?? ?? ?? 48 89 6C 24 ?? 48 85 FF 74 ?? 48 8B 87 ?? ?? ?? ?? 48 85 C0 75 ?? 48 8B CF", 3);
+    print("GEngine = " + memory.ReadPointer(GEngine).ToString("X16"));
+
+    Func<Dictionary<int, string>> DumpNames = () => {
+        int FNameStride = 2;
+        int FNameDataOffset = 2;
+        int FNameMaxBlockBits = 13;
+        int FNameBlockOffsetBits = 16;
+        int FNameMaxBlocks = 1 << FNameMaxBlockBits;
+        int FNameBlockOffsets = 1 << FNameBlockOffsetBits;
+        int FNameBlockSize = FNameStride * FNameBlockOffsets;
+
+        var Names = new Dictionary<int, string>();
+
+        Action<int,int> DumpBlock = (int BlockIndex, int BlockSize) => {
+            IntPtr BlockPtr = memory.ReadPointer(GNames + 16 + BlockIndex * 8);
+            var BlockEnd = BlockPtr.ToInt64() + BlockSize - FNameDataOffset;
+            int Offset = 0;
+
+            while (BlockPtr.ToInt64() < BlockEnd)
+            {
+                var Header = memory.ReadValue<short>(BlockPtr);
+                var IsWide = (Header & 1) == 1;
+                var Length = (Header >> 6);
+                if (Length == 0)
+                    break;
+
+                var NameSize = Length * (IsWide ? 2 : 1);
+                var Value = memory.ReadString(BlockPtr + FNameDataOffset, IsWide ? ReadStringType.UTF16 : ReadStringType.UTF8, NameSize);
+
+                var EntrySize = (FNameDataOffset + NameSize + FNameStride - 1) & ~(FNameStride - 1);
+                BlockPtr = BlockPtr + EntrySize;
+
+                var Handle = BlockIndex << FNameBlockOffsetBits | Offset;
+                Offset += EntrySize / FNameStride;
+
+                Names.Add(Handle, Value);
+            }
+        };
+
+        var CurrentBlock = memory.ReadValue<int>(IntPtr.Add(GNames, 0x8));
+        var CurrentByteCursor = memory.ReadValue<int>(IntPtr.Add(GNames, 0xC));
+
+        for (int BlockIndex = 0; BlockIndex < CurrentBlock; ++BlockIndex)
+        {
+            DumpBlock(BlockIndex, FNameBlockSize);
+        }
+        DumpBlock(CurrentBlock, CurrentByteCursor);
+
+        return Names;
+    };
+
+    vars.Names = DumpNames();
+    print("Names.Count = " + vars.Names.Count.ToString());
+
+    vars.PlayerPawn = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x38, 0x0, 0x30, 0x250);
+    vars.RealTime = new MemoryWatcher<float>(new DeepPointer(GEngine, 0x780, 0x78, 0x5A0));
+
+    var ProgressFlagManager = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x358, 0x50);
+    var ActiveAbilityNameSet = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0xC8);
+    var ActiveComboDefinitions = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0x118);
 
     Action<IntPtr, int, Action<IntPtr>> ReadArray = (IntPtr ArrayPtr, int ElementSize, Action<IntPtr> Callback) => {
         IntPtr ArrayData = memory.ReadPointer(IntPtr.Add(ArrayPtr, 0x0));
@@ -46,12 +99,12 @@ init
 
         // Game Progress Flags
         IntPtr ProgressFlagManagerPtr = IntPtr.Zero;
-        if (vars.ProgressFlagManagerPtr.DerefOffsets(game, out ProgressFlagManagerPtr))
+        if (ProgressFlagManager.DerefOffsets(game, out ProgressFlagManagerPtr))
         {
             ReadArray(ProgressFlagManagerPtr, 0x14, (IntPtr ArrayElement) => {
-                int TagName = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x0));
+                int TagHandle = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x0));
                 int Progress = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x8));
-                vars.ProgressCurrent.Add(TagName, Progress);
+                vars.ProgressCurrent.Add(vars.Names[TagHandle], Progress);
             });
         }
     };
@@ -68,7 +121,7 @@ init
 
         // Unlockable Abilities
         IntPtr ActiveAbilityNameSetPtr = IntPtr.Zero;
-        if (vars.ActiveAbilityNameSetPtr.DerefOffsets(game, out ActiveAbilityNameSetPtr))
+        if (ActiveAbilityNameSet.DerefOffsets(game, out ActiveAbilityNameSetPtr))
         {
             ReadArray(ActiveAbilityNameSetPtr, 0x18, (IntPtr ArrayElement) => {
                 IntPtr AbilityNamePtr = memory.ReadPointer(IntPtr.Add(ArrayElement, 0x0));
@@ -78,10 +131,9 @@ init
             });
         }
 
-        /*
         // Weapons Combos
         IntPtr ActiveComboDefinitionsPtr = IntPtr.Zero;
-        if (vars.ActiveComboDefinitionsPtr.DerefOffsets(game, out ActiveComboDefinitionsPtr))
+        if (ActiveComboDefinitions.DerefOffsets(game, out ActiveComboDefinitionsPtr))
         {
             ReadArray(ActiveComboDefinitionsPtr, 0x60, (IntPtr ArrayElement) => {
                 string WeaponName = "Unknown";
@@ -98,7 +150,6 @@ init
                 });
             });
         }
-        */
     };
 
     vars.UpdateUnlocks = UpdateUnlocks;
@@ -110,9 +161,11 @@ startup
     refreshRate = 30;
 
     vars.GameTime = 0.0;
+    vars.RealTimeOld = 0.0;
+    vars.RealTimeCurrent = 0.0;
 
-    vars.ProgressOld = new Dictionary<int, int>();
-    vars.ProgressCurrent = new Dictionary<int, int>();
+    vars.ProgressOld = new Dictionary<string, int>();
+    vars.ProgressCurrent = new Dictionary<string, int>();
 
     vars.UnlocksOld = new HashSet<string>();
     vars.UnlocksCurrent = new HashSet<string>();
@@ -121,82 +174,34 @@ startup
     settings.Add("Progress", true, "Game Progress");
 
     settings.CurrentDefaultParent = "Abilities";
-    settings.Add("EXECUTION", false, "Execution");
     settings.Add("WALLSLIDING", true, "Wall Jump");
-    settings.Add("FISTCHARGE", false, "Power Punch");
     settings.Add("MULTIJUMP", true, "Double Jump");
-    settings.Add("EXECUTIONBONUS", false, "Execution+");
-    settings.Add("FISTWAZAA", false, "Rising Punch");
-    settings.Add("GLIDING", false, "GLIDING");
-    settings.Add("PARRY", false, "Parry");
-    settings.Add("FISTWAZAB", false, "FISTWAZAB");
     settings.Add("DASH", true, "Omni-Dash");
-    settings.Add("CHAINTRICK", false, "CHAINTRICK");
-    settings.Add("SCUBA", false, "SCUBA");
-    settings.Add("WATERDRILLING", false, "WATERDRILLING");
     settings.Add("DASHTHROUGH", true, "Omni-Dash+");
-    settings.Add("BLENDERWAZAA", false, "BLENDERWAZAA");
-    settings.Add("BLENDERWAZAB", false, "Screw Driver");
-    settings.Add("FISTCHARGESUPER", false, "FISTCHARGESUPER");
-    settings.Add("FISTWAZAASUPER", false, "FISTWAZAASUPER");
-    settings.Add("FISTWAZABSUPER", false, "FISTWAZABSUPER");
-    settings.Add("BLENDERWAZABSUPER", false, "BLENDERWAZABSUPER");
-    settings.Add("BLENDERWAZAASUPER", false, "BLENDERWAZAASUPER");
-    settings.Add("BERSERK", false, "BERSERK");
 
     settings.CurrentDefaultParent = "Progress";
-    settings.Add("3407947:0:1", false, "Get Fist");
-    settings.Add("3407940:0:1", true, "Get Drill");
-    settings.Add("3407933:0:1", false, "Get Chain");
-    settings.Add("3387461:1100:1101", false, "Ancient Complex door open");
-    settings.Add("3387461:0:1202", false, "Yokozuna encounter");
-    settings.Add("3400612:0:1", false, "Carrot Whiskey");
-    settings.Add("3385619:0:1", false, "Zapper mini-boss");
-    settings.Add("3383730:0:1", false, "Mechanical Core encounter");
-    settings.Add("3403190:0:1", false, "Lower Torch Tower");
-    settings.Add("3402729:0:1", false, "First Cicero encounter");
-    settings.Add("3393781:0:1", true, "Enter prison");
-    settings.Add("3393781:1:3", false, "Prison cutscenes end");
-    settings.Add("3393781:3:4", false, "Voltage encounter");
-    settings.Add("3393781:4:5", true, "Prison escape");
-    settings.Add("3393808:0:1", true, "Get missile launcher");
-    settings.Add("3393795:0:1", false, "Get weapons back");
-    settings.Add("3386783:0:1", false, "Get Prison Key");
-    settings.Add("3380565:0:1", false, "Tower Duke talk");
-    settings.Add("3407626:0:1", true, "Water problem talk");
-    settings.Add("3407682:0:1", false, "Start valve quest");
-    settings.Add("3407682:1:3", false, "Get valve");
-    settings.Add("3407682:3:4", false, "Valve quest end");
-    settings.Add("3407597:0:1", true, "Flood eliminated");
-    settings.Add("3386946:0:1", true, "Get Spark Key");
-    settings.Add("3386946:1:-2", true, "Use Spark Key");
-    settings.Add("3395657:0:1", true, "Stone worm escaped");
-    settings.Add("3397081:0:1", true, "Coastal Fortress enter");
-    settings.Add("3397067:0:1", false, "Yokozuna on the horizon");
-    settings.Add("3396604:0:1", true, "Yokozuna defeated");
-    settings.Add("3404611:0:1", false, "Junior Cicero encounter");
-    settings.Add("3404348:0:1", true, "Junior Cicero defeated");
-    settings.Add("3404547:0:1", false, "After Junior Cicero flee");
-    settings.Add("3404566:0:1", false, "Elevator left lock");
-    settings.Add("3404582:0:2", false, "Elevator right lock");
-    settings.Add("3404383:0:1", false, "Elevator activated");
-    settings.Add("3404383:1:2", false, "Elevator lockdown");
-    settings.Add("3404383:2:3", true, "Elevator unlocked");
-    settings.Add("3404383:3:4", false, "Eleavtor on top");
-    settings.Add("3404312:0:2", false, "Elevator battle end");
-    settings.Add("3404505:0:1", false, "Super Cicero encounter");
-    settings.Add("3404505:1:2", true, "Super Cicero defeated");
+    settings.Add("Weapon.Drill:0:1", true, "Get Drill");
+    settings.Add("Prison.Quest.FirstInPrison:0:1", true, "Enter prison");
+    settings.Add("Prison.Quest.FirstInPrison:4:5", true, "Prison escape");
+    settings.Add("Prison.Quest.GetLauncer:0:1", true, "Get missile launcher");
+    settings.Add("WaterStation.NPC.MouseA.D1:0:1", true, "Water problem talk");
+    settings.Add("WaterStation.Flow.WaterExpelled:0:1", true, "Flood eliminated");
+    settings.Add("Item.Tinder.2:0:1", true, "Get Spark Key");
+    settings.Add("Item.Tinder.2:1:-2", true, "Use Spark Key");
+    settings.Add("RelicLD.Quest.EscapeFromSnake:0:1", true, "Stone worm escaped");
+    settings.Add("SeasideLD.Quest.FirstIn:0:1", true, "Coastal Fortress enter");
+    settings.Add("SeasideLD.Boss.Death:0:1", true, "Yokozuna defeated");
+    settings.Add("UpperTower.Progress.JuniorCicero:0:1", true, "Junior Cicero defeated");
+    settings.Add("UpperTower.Progress.MainProgress:2:3", true, "Elevator unlocked");
+    settings.Add("UpperTower.Progress.SuperCicero:1:2", true, "Super Cicero defeated");
 }
 
 start
 {
-    // BP_FISTGameMode_C index 0x002E5B77
-    //if (old.GameModeType != current.GameModeType && current.GameModeType == 0x002E5B77)
-
-    // [3387387] MainQuest
-    if (vars.ProgressCurrent.ContainsKey(3387387) && vars.ProgressCurrent[3387387] == 1)
+    if (vars.ProgressCurrent.ContainsKey("MainQuest") && vars.ProgressCurrent["MainQuest"] == 1)
     {
         vars.GameTime = 0.0;
+        vars.RealTimeCurrent = 0.0;
         vars.ProgressCurrent.Clear();
         vars.UnlocksCurrent.Clear();
         return true;
@@ -210,11 +215,11 @@ update
     vars.UpdateProgress();
     vars.UpdateUnlocks();
 
-    vars.GameTime += (current.RealTime > old.RealTime)
-        ? current.RealTime - old.RealTime
+    vars.RealTime.Update(game);
+    vars.GameTime += (vars.RealTime.Current > vars.RealTime.Old)
+        ? vars.RealTime.Current - vars.RealTime.Old
         : 0.0;
 
-    /*
     // Debug Section
     StringBuilder OutputBuffer = new StringBuilder();
     foreach (var ProgressEntry in vars.ProgressCurrent)
@@ -222,7 +227,7 @@ update
         int OldValue = -1;
         if (!vars.ProgressOld.TryGetValue(ProgressEntry.Key, out OldValue) || OldValue != ProgressEntry.Value)
         {
-            OutputBuffer.AppendLine(ProgressEntry.Key.ToString() + " : " + OldValue.ToString() + " -> " + ProgressEntry.Value.ToString());
+            OutputBuffer.AppendLine(ProgressEntry.Key + " : " + OldValue.ToString() + " -> " + ProgressEntry.Value.ToString());
         }
     }
     foreach (var UnlockName in vars.UnlocksCurrent)
@@ -234,7 +239,6 @@ update
     {
         print(OutputBuffer.ToString());
     }
-    */
 }
 
 /*
@@ -247,22 +251,14 @@ gameTime
 isLoading
 {
     // Still not found a good way to detect Loading Screen
-    return /* current.GameModeType != 0x002E5B77 || */ current.PawnAddress == 0;
+    return vars.PlayerPawn.Deref<IntPtr>(game) == IntPtr.Zero;
 }
 
 split
 {
     // Prevents triggering after loading from Main Menu
-    if (!vars.ProgressOld.ContainsKey(3387387) || vars.ProgressOld[3387387] == 0)
+    if (!vars.ProgressOld.ContainsKey("MainQuest") || vars.ProgressOld["MainQuest"] == 0)
         return false;
-
-    /*
-    if (old.SkillRecover == 0 && current.SkillRecover != 0) // Carrot Whiskey
-        return true;
-
-    if (old.SkillMissile == 0 && current.SkillMissile != 0) // Rocket Launcher
-        return true;
-    */
 
     foreach (var UnlockName in vars.UnlocksCurrent)
     {
@@ -278,7 +274,7 @@ split
         int OldValue = 0;
         if (!vars.ProgressOld.TryGetValue(ProgressEntry.Key, out OldValue) || OldValue != ProgressEntry.Value)
         {
-            var ProgressName = ProgressEntry.Key.ToString() + ":" + OldValue.ToString() + ":" + ProgressEntry.Value.ToString();
+            var ProgressName = ProgressEntry.Key + ":" + OldValue.ToString() + ":" + ProgressEntry.Value.ToString();
             if (settings.ContainsKey(ProgressName) && settings[ProgressName])
             {
                 print("Progress Split: " + ProgressName);
