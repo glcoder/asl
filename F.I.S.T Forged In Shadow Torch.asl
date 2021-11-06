@@ -4,22 +4,109 @@ state("ZingangGame-Win64-Shipping", "Steam")
 
 init
 {
-    Func<string, int, IntPtr> FindSignaturePointer = (string Signature, int OffsetPosition) => {
+    vars.Initialized = false;
+
+    Func<string, int, IntPtr> OffsetSignatureScan = (string Signature, int OffsetPosition) => {
         var Scanner = new SignatureScanner(game, modules.First().BaseAddress, modules.First().ModuleMemorySize);
         IntPtr Pointer = Scanner.Scan(new SigScanTarget(Signature));
         if (Pointer != IntPtr.Zero)
         {
-            var Offset = memory.ReadValue<int>(IntPtr.Add(Pointer, OffsetPosition));
-            Pointer = IntPtr.Add(Pointer, Offset + OffsetPosition + sizeof(int));
+            var Offset = memory.ReadValue<int>(Pointer + OffsetPosition);
+            Pointer = Pointer + Offset + OffsetPosition + sizeof(int);
         }
         return Pointer;
     };
 
-    IntPtr GNames = FindSignaturePointer("48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 0F 10 03 4C 8D 44 24 20 48 8B C8", 3);
+    IntPtr GNames = OffsetSignatureScan("48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 0F 10 03 4C 8D 44 24 20 48 8B C8", 3);
     print("GNames = " + GNames.ToString("X16"));
 
-    IntPtr GEngine = FindSignaturePointer("48 8B 3D ?? ?? ?? ?? 48 89 6C 24 ?? 48 85 FF 74 ?? 48 8B 87 ?? ?? ?? ?? 48 85 C0 75 ?? 48 8B CF", 3);
-    print("GEngine = " + memory.ReadPointer(GEngine).ToString("X16"));
+    IntPtr GEngine = OffsetSignatureScan("48 8B 3D ?? ?? ?? ?? 48 89 6C 24 ?? 48 85 FF 74 ?? 48 8B 87 ?? ?? ?? ?? 48 85 C0 75 ?? 48 8B CF", 3);
+    print("GEngine = " + GEngine.ToString("X16"));
+
+    vars.PlayerPawn = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x38, 0x0, 0x30, 0x250);
+    vars.RealTime = new MemoryWatcher<float>(new DeepPointer(GEngine, 0x780, 0x78, 0x5A0));
+
+    var ProgressFlagManager = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x358, 0x50);
+    var ActiveAbilityNameSet = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0xC8);
+    var ActiveComboDefinitions = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0x118);
+
+    Action<IntPtr, int, Action<IntPtr>> ReadArray = (IntPtr ArrayPtr, int ElementSize, Action<IntPtr> Callback) => {
+        IntPtr ArrayData = memory.ReadPointer(ArrayPtr);
+        int ArrayNum = memory.ReadValue<int>(ArrayPtr + 0x8);
+        for (int Index = 0; Index < ArrayNum; ++Index)
+        {
+            Callback(ArrayData + Index * ElementSize);
+        }
+    };
+
+    Action UpdateProgress = () => {
+        vars.ProgressOld.Clear();
+        foreach (var ProgressEntry in vars.ProgressCurrent)
+        {
+            vars.ProgressOld.Add(ProgressEntry.Key, ProgressEntry.Value);
+        }
+        vars.ProgressCurrent.Clear();
+
+        // Game Progress Flags
+        IntPtr ProgressFlagManagerPtr = IntPtr.Zero;
+        if (ProgressFlagManager.DerefOffsets(game, out ProgressFlagManagerPtr))
+        {
+            ReadArray(ProgressFlagManagerPtr, 0x14, (IntPtr ArrayElement) => {
+                int TagId = memory.ReadValue<int>(ArrayElement);
+                string TagName;
+                if (vars.Names.TryGetValue(TagId, out TagName))
+                {
+                    int TagProgress = memory.ReadValue<int>(ArrayElement + 0x8);
+                    vars.ProgressCurrent.Add(TagName, TagProgress);
+                }
+            });
+        }
+    };
+
+    vars.UpdateProgress = UpdateProgress;
+
+    Action UpdateUnlocks = () => {
+        vars.UnlocksOld.Clear();
+        foreach (var UnlockName in vars.UnlocksCurrent)
+        {
+            vars.UnlocksOld.Add(UnlockName);
+        }
+        vars.UnlocksCurrent.Clear();
+
+        // Unlockable Abilities
+        IntPtr ActiveAbilityNameSetPtr = IntPtr.Zero;
+        if (ActiveAbilityNameSet.DerefOffsets(game, out ActiveAbilityNameSetPtr))
+        {
+            ReadArray(ActiveAbilityNameSetPtr, 0x18, (IntPtr ArrayElement) => {
+                IntPtr AbilityNamePtr = memory.ReadPointer(ArrayElement);
+                int AbilityNameLength = memory.ReadValue<int>(ArrayElement + 0x8);
+                string AbilityName = memory.ReadString(AbilityNamePtr, ReadStringType.UTF16, AbilityNameLength * 2);
+                vars.UnlocksCurrent.Add(AbilityName);
+            });
+        }
+
+        // Weapons Combos
+        IntPtr ActiveComboDefinitionsPtr = IntPtr.Zero;
+        if (ActiveComboDefinitions.DerefOffsets(game, out ActiveComboDefinitionsPtr))
+        {
+            ReadArray(ActiveComboDefinitionsPtr, 0x60, (IntPtr ArrayElement) => {
+                string WeaponName = "Unknown";
+                switch (memory.ReadValue<int>(ArrayElement)) {
+                    case 1: WeaponName = "Fist";  break;
+                    case 2: WeaponName = "Drill"; break;
+                    case 3: WeaponName = "Chain"; break;
+                };
+                ReadArray(ArrayElement + 0x8, 0x18, (IntPtr ComboArrayElement) => {
+                    IntPtr ComboNamePtr = memory.ReadPointer(ComboArrayElement);
+                    int ComboNameLength = memory.ReadValue<int>(ComboArrayElement + 0x8);
+                    string ComboName = memory.ReadString(ComboNamePtr, ReadStringType.UTF16, ComboNameLength * 2);
+                    vars.UnlocksCurrent.Add(WeaponName + "_" + ComboName);
+                });
+            });
+        }
+    };
+
+    vars.UpdateUnlocks = UpdateUnlocks;
 
     Func<Dictionary<int, string>> DumpNames = () => {
         int FNameStride = 2;
@@ -58,101 +145,20 @@ init
             }
         };
 
-        var CurrentBlock = memory.ReadValue<int>(IntPtr.Add(GNames, 0x8));
-        var CurrentByteCursor = memory.ReadValue<int>(IntPtr.Add(GNames, 0xC));
+        var CurrentBlock = memory.ReadValue<int>(GNames + 0x8);
+        var CurrentByteCursor = memory.ReadValue<int>(GNames + 0xC);
 
         for (int BlockIndex = 0; BlockIndex < CurrentBlock; ++BlockIndex)
         {
             DumpBlock(BlockIndex, FNameBlockSize);
         }
+
         DumpBlock(CurrentBlock, CurrentByteCursor);
 
         return Names;
     };
 
-    vars.Names = DumpNames();
-    print("Names.Count = " + vars.Names.Count.ToString());
-
-    vars.PlayerPawn = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x38, 0x0, 0x30, 0x250);
-    vars.RealTime = new MemoryWatcher<float>(new DeepPointer(GEngine, 0x780, 0x78, 0x5A0));
-
-    var ProgressFlagManager = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x358, 0x50);
-    var ActiveAbilityNameSet = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0xC8);
-    var ActiveComboDefinitions = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0x118);
-
-    Action<IntPtr, int, Action<IntPtr>> ReadArray = (IntPtr ArrayPtr, int ElementSize, Action<IntPtr> Callback) => {
-        IntPtr ArrayData = memory.ReadPointer(IntPtr.Add(ArrayPtr, 0x0));
-        int ArrayNum = memory.ReadValue<int>(IntPtr.Add(ArrayPtr, 0x8));
-        for (int Index = 0; Index < ArrayNum; ++Index)
-        {
-            Callback(IntPtr.Add(ArrayData, Index * ElementSize));
-        }
-    };
-
-    Action UpdateProgress = () => {
-        vars.ProgressOld.Clear();
-        foreach (var ProgressEntry in vars.ProgressCurrent)
-        {
-            vars.ProgressOld.Add(ProgressEntry.Key, ProgressEntry.Value);
-        }
-        vars.ProgressCurrent.Clear();
-
-        // Game Progress Flags
-        IntPtr ProgressFlagManagerPtr = IntPtr.Zero;
-        if (ProgressFlagManager.DerefOffsets(game, out ProgressFlagManagerPtr))
-        {
-            ReadArray(ProgressFlagManagerPtr, 0x14, (IntPtr ArrayElement) => {
-                int TagHandle = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x0));
-                int Progress = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x8));
-                vars.ProgressCurrent.Add(vars.Names[TagHandle], Progress);
-            });
-        }
-    };
-
-    vars.UpdateProgress = UpdateProgress;
-
-    Action UpdateUnlocks = () => {
-        vars.UnlocksOld.Clear();
-        foreach (var UnlockName in vars.UnlocksCurrent)
-        {
-            vars.UnlocksOld.Add(UnlockName);
-        }
-        vars.UnlocksCurrent.Clear();
-
-        // Unlockable Abilities
-        IntPtr ActiveAbilityNameSetPtr = IntPtr.Zero;
-        if (ActiveAbilityNameSet.DerefOffsets(game, out ActiveAbilityNameSetPtr))
-        {
-            ReadArray(ActiveAbilityNameSetPtr, 0x18, (IntPtr ArrayElement) => {
-                IntPtr AbilityNamePtr = memory.ReadPointer(IntPtr.Add(ArrayElement, 0x0));
-                int AbilityNameLength = memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x8));
-                string AbilityName = memory.ReadString(AbilityNamePtr, ReadStringType.UTF16, AbilityNameLength * 2);
-                vars.UnlocksCurrent.Add(AbilityName);
-            });
-        }
-
-        // Weapons Combos
-        IntPtr ActiveComboDefinitionsPtr = IntPtr.Zero;
-        if (ActiveComboDefinitions.DerefOffsets(game, out ActiveComboDefinitionsPtr))
-        {
-            ReadArray(ActiveComboDefinitionsPtr, 0x60, (IntPtr ArrayElement) => {
-                string WeaponName = "Unknown";
-                switch (memory.ReadValue<int>(IntPtr.Add(ArrayElement, 0x0))) {
-                    case 1: WeaponName = "Fist";  break;
-                    case 2: WeaponName = "Drill"; break;
-                    case 3: WeaponName = "Chain"; break;
-                };
-                ReadArray(IntPtr.Add(ArrayElement, 0x8), 0x18, (IntPtr ComboArrayElement) => {
-                    IntPtr ComboNamePtr = memory.ReadPointer(IntPtr.Add(ComboArrayElement, 0x0));
-                    int ComboNameLength = memory.ReadValue<int>(IntPtr.Add(ComboArrayElement, 0x8));
-                    string ComboName = memory.ReadString(ComboNamePtr, ReadStringType.UTF16, ComboNameLength * 2);
-                    vars.UnlocksCurrent.Add(WeaponName + "_" + ComboName);
-                });
-            });
-        }
-    };
-
-    vars.UpdateUnlocks = UpdateUnlocks;
+    vars.DumpNames = DumpNames;
 }
 
 startup
@@ -160,13 +166,15 @@ startup
     // Reduce CPU usage by reducing memory read operations
     refreshRate = 30;
 
+    vars.Initialized = false;
+    vars.Names = new Dictionary<int, string>();
+
     vars.GameTime = 0.0;
     vars.RealTimeOld = 0.0;
     vars.RealTimeCurrent = 0.0;
 
     vars.ProgressOld = new Dictionary<string, int>();
     vars.ProgressCurrent = new Dictionary<string, int>();
-
     vars.UnlocksOld = new HashSet<string>();
     vars.UnlocksCurrent = new HashSet<string>();
 
@@ -212,6 +220,13 @@ start
 
 update
 {
+    if (!vars.Initialized && vars.PlayerPawn.Deref<IntPtr>(game) != IntPtr.Zero)
+    {
+        vars.Initialized = true;
+        vars.Names = vars.DumpNames();
+        print("Names.Count = " + vars.Names.Count.ToString());
+    }
+
     vars.UpdateProgress();
     vars.UpdateUnlocks();
 
