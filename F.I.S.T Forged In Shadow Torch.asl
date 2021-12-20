@@ -26,9 +26,9 @@ init
     vars.PlayerPawn = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x38, 0x0, 0x30, 0x250);
     vars.RealTime = new MemoryWatcher<float>(new DeepPointer(GEngine, 0x780, 0x78, 0x5A0));
 
-    var ProgressFlagManager = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x358, 0x50);
-    var ActiveAbilityNameSet = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0xC8);
-    var ActiveComboDefinitions = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A0, 0x118);
+    var ProgressFlagManager = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x360, 0x50);
+    var ActiveAbilityNameSet = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A8, 0xC8);
+    var ActiveComboDefinitions = new DeepPointer(GEngine, 0x780, 0x78, 0x180, 0x3A8, 0x118);
 
     Action<IntPtr, int, Action<IntPtr>> ReadArray = (IntPtr ArrayPtr, int ElementSize, Action<IntPtr> Callback) => {
         IntPtr ArrayData = memory.ReadPointer(ArrayPtr);
