@@ -14,12 +14,12 @@ startup
     vars.OldScene = "";
     vars.CurrentScene = "";
 
-	settings.Add("Any%", true);
-	settings.Add("Leshy", true, "Leshy", "Any%");
-	settings.Add("Heket", true, "Heket", "Any%");
-	settings.Add("Kallamar", true, "Kallamar", "Any%");
-	settings.Add("Shamura", true, "Shamura", "Any%");
-	settings.Add("TheOne", true, "The One Who Waits", "Any%");
+    settings.Add("Any%", true);
+    settings.Add("Leshy", true, "Leshy", "Any%");
+    settings.Add("Heket", true, "Heket", "Any%");
+    settings.Add("Kallamar", true, "Kallamar", "Any%");
+    settings.Add("Shamura", true, "Shamura", "Any%");
+    settings.Add("TheOne", true, "The One Who Waits", "Any%");
 }
 
 init
