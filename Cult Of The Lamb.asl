@@ -4,11 +4,11 @@ state("Cult Of The Lamb", "Steam")
 
 startup
 {
-	var bytes = File.ReadAllBytes(@"Components\LiveSplit.ASLHelper.bin");
-	var type = Assembly.Load(bytes).GetType("ASLHelper.Unity");
+    var bytes = File.ReadAllBytes(@"Components\LiveSplit.ASLHelper.bin");
+    var type = Assembly.Load(bytes).GetType("ASLHelper.Unity");
 
-	vars.Helper = Activator.CreateInstance(type, timer, this);
-	vars.Helper.GameName = "Cult Of The Lamb";
+    vars.Helper = Activator.CreateInstance(type, timer, this);
+    vars.Helper.GameName = "Cult Of The Lamb";
     vars.Helper.LoadSceneManager = true;
 
     vars.OldScene = "";
