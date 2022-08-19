@@ -69,6 +69,11 @@ split
         || (settings["Shamura"] && !vars.Helper["BossesCompleted"].Old.Contains(10) && vars.Helper["BossesCompleted"].Current.Contains(10));
 }
 
+reset
+{
+    return vars.CurrentScene == "Main Menu";
+}
+
 exit
 {
 	vars.Helper.Dispose();
