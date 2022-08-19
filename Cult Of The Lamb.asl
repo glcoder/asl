@@ -13,6 +13,13 @@ startup
 
     vars.OldScene = "";
     vars.CurrentScene = "";
+
+	settings.Add("Any%", true);
+	settings.Add("Leshy", true, "Leshy", "Any%");
+	settings.Add("Heket", true, "Heket", "Any%");
+	settings.Add("Kallamar", true, "Kallamar", "Any%");
+	settings.Add("Shamura", true, "Shamura", "Any%");
+	settings.Add("TheOne", true, "The One Who Waits", "Any%");
 }
 
 init
@@ -54,12 +61,12 @@ split
     if (vars.CurrentScene == "Main Menu")
         return false;
 
-    return (!vars.Helper["DeathCatBeaten"].Old && vars.Helper["DeathCatBeaten"].Current)
-        || (vars.OldScene != "Credits" && vars.CurrentScene == "Credits")
-        || (!vars.Helper["BossesCompleted"].Old.Contains(7)  && vars.Helper["BossesCompleted"].Current.Contains(7))
-        || (!vars.Helper["BossesCompleted"].Old.Contains(8)  && vars.Helper["BossesCompleted"].Current.Contains(8))
-        || (!vars.Helper["BossesCompleted"].Old.Contains(9)  && vars.Helper["BossesCompleted"].Current.Contains(9))
-        || (!vars.Helper["BossesCompleted"].Old.Contains(10) && vars.Helper["BossesCompleted"].Current.Contains(10));
+    return (settings["TheOne"] && vars.OldScene != "Credits" && vars.CurrentScene == "Credits")
+        || (settings["TheOne"] && !vars.Helper["DeathCatBeaten"].Old && vars.Helper["DeathCatBeaten"].Current)
+        || (settings["Leshy"] && !vars.Helper["BossesCompleted"].Old.Contains(7)  && vars.Helper["BossesCompleted"].Current.Contains(7))
+        || (settings["Heket"] && !vars.Helper["BossesCompleted"].Old.Contains(8)  && vars.Helper["BossesCompleted"].Current.Contains(8))
+        || (settings["Kallamar"] && !vars.Helper["BossesCompleted"].Old.Contains(9)  && vars.Helper["BossesCompleted"].Current.Contains(9))
+        || (settings["Shamura"] && !vars.Helper["BossesCompleted"].Old.Contains(10) && vars.Helper["BossesCompleted"].Current.Contains(10));
 }
 
 exit
