@@ -14,7 +14,7 @@ startup
     vars.OldScene = "";
     vars.CurrentScene = "";
 
-    settings.Add("Intro", true, "Intro Splits");
+    settings.Add("Intro", false, "Intro Splits");
 
     settings.Add("Cutscene", false, "Starting cutscene end", "Intro");
     settings.Add("Difficulty", false, "Difficulty chosen", "Intro");
