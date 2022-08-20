@@ -14,6 +14,11 @@ startup
     vars.OldScene = "";
     vars.CurrentScene = "";
 
+    settings.Add("Intro", true, "Intro Splits");
+
+    settings.Add("Cutscene", false, "Starting cutscene end", "Intro");
+    settings.Add("Difficulty", false, "Difficulty chosen", "Intro");
+
     settings.Add("Bosses", true, "Bosses Splits");
 
     settings.Add("Leshy", true, "Leshy", "Bosses");
@@ -59,14 +64,18 @@ init
 {
     vars.Helper.TryOnLoad = (Func<dynamic, bool>)(mono =>
     {
+        var MMTransition = mono.GetClass("MMTools.MMTransition");
+        vars.Helper["IsLoading"] = MMTransition.Make<bool>("IsPlaying");
+
+        var MMVideoPlayer = mono.GetClass("MMTools.MMVideoPlayer");
+        vars.Helper["IsVideoCompleted"] = MMVideoPlayer.Make<bool>("mmVideoPlayer", "completed");
+
         var DataManager = mono.GetClass("DataManager");
+        vars.Helper["DifficultyChosen"] = DataManager.Make<bool>("instance", "DifficultyChosen");
         vars.Helper["BossesCompleted"] = DataManager.MakeList<int>("instance", "BossesCompleted");
         vars.Helper["UnlockedFleeces"] = DataManager.MakeList<int>("instance", "UnlockedFleeces");
         vars.Helper["DeathCatBeaten"] = DataManager.Make<bool>("instance", "DeathCatBeaten");
         vars.Helper["PlayerFleece"] = DataManager.Make<int>("instance", "PlayerFleece");
-
-        var MMTransition = mono.GetClass("MMTools.MMTransition");
-        vars.Helper["IsPlaying"] = MMTransition.Make<bool>("IsPlaying");
 
         return true;
     });
@@ -87,14 +96,12 @@ update
 
 isLoading
 {
-    return (vars.Helper["IsPlaying"].Current && vars.CurrentScene != "QuoteScreen")
-        || string.IsNullOrEmpty(vars.CurrentScene)
-        || vars.CurrentScene == "BufferScene";
+    return !vars.Helper["IsVideoCompleted"].Current || (vars.Helper["IsLoading"].Current && vars.CurrentScene != "QuoteScreen");
 }
 
 start
 {
-    return vars.CurrentScene == "Game Biome Intro";
+    return !vars.Helper["IsLoading"].Current && vars.CurrentScene == "Game Biome Intro";
 }
 
 split
@@ -102,9 +109,17 @@ split
     if (vars.CurrentScene == "Main Menu")
         return false;
 
+    // On starting cutscene ends
+    if (settings["Cutscene"] && !vars.Helper["IsVideoCompleted"].Old && vars.Helper["IsVideoCompleted"].Current)
+        return true;
+
+    // On difficulty chosen
+    if (settings["Difficulty"] && !vars.Helper["DifficultyChosen"].Old && vars.Helper["DifficultyChosen"].Current)
+        return true;
+
     if (vars.OldScene != vars.CurrentScene)
     {
-        // The One Who Waits kneeled
+        // Kneeled before The One Who Waits
         if (settings["TheOneWhoWaits"] && vars.CurrentScene == "Credits")
             return true;
 
