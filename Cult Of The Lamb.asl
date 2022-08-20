@@ -16,7 +16,8 @@ startup
 
     settings.Add("Intro", false, "Intro Splits");
 
-    settings.Add("Cutscene", false, "Starting cutscene end", "Intro");
+    settings.Add("Title", false, "Title video ends", "Intro");
+    settings.Add("Base", false, "First time on base", "Intro");
     settings.Add("Difficulty", false, "Difficulty chosen", "Intro");
 
     settings.Add("Bosses", true, "Bosses Splits");
@@ -90,8 +91,12 @@ update
     if (!vars.Helper.Update())
 		return false;
 
-    vars.OldScene = vars.CurrentScene;
-    vars.CurrentScene = vars.Helper.Scenes.Active.Name;
+    // Prevents scene splits while loading
+    if (!vars.Helper["IsLoading"].Current)
+    {
+        vars.OldScene = vars.CurrentScene;
+        vars.CurrentScene = vars.Helper.Scenes.Active.Name;
+    }
 }
 
 isLoading
@@ -109,8 +114,8 @@ split
     if (vars.CurrentScene == "Main Menu")
         return false;
 
-    // On starting cutscene ends
-    if (settings["Cutscene"] && !vars.Helper["IsVideoCompleted"].Old && vars.Helper["IsVideoCompleted"].Current)
+    // On title video ends
+    if (settings["Title"] && !vars.Helper["IsVideoCompleted"].Old && vars.Helper["IsVideoCompleted"].Current)
         return true;
 
     // On difficulty chosen
@@ -119,6 +124,10 @@ split
 
     if (vars.OldScene != vars.CurrentScene)
     {
+        // First time base visited
+        if (settings["Base"] && vars.CurrentScene == "Base Biome 1" && !vars.Helper["DifficultyChosen"].Current)
+            return true;
+
         // Kneeled before The One Who Waits
         if (settings["TheOneWhoWaits"] && vars.CurrentScene == "Credits")
             return true;
