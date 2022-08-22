@@ -86,7 +86,7 @@ init
 update
 {
     if (!vars.Helper.Update())
-		return false;
+        return false;
 
     current.IsLoading = vars.Helper["IsLoading"].Current;
     current.IsVideoCompleted = vars.Helper["IsVideoCompleted"].Current;
@@ -213,10 +213,10 @@ reset
 
 exit
 {
-	vars.Helper.Dispose();
+    vars.Helper.Dispose();
 }
 
 shutdown
 {
-	vars.Helper.Dispose();
+    vars.Helper.Dispose();
 }
