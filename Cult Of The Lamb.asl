@@ -1,4 +1,4 @@
-state("Cult Of The Lamb", "Steam")
+state("Cult Of The Lamb")
 {
 }
 
@@ -11,61 +11,42 @@ startup
     vars.Helper.GameName = "Cult Of The Lamb";
     vars.Helper.LoadSceneManager = true;
 
-    vars.OldScene = "";
-    vars.CurrentScene = "";
+    settings.Add("General", true, "General game splits");
+    settings.Add("TitleVideo", false, "Title video ends", "General");
+    settings.Add("CultBase", true, "Entering Base for the first time", "General");
+    settings.Add("Difficulty", false, "Game difficulty chosen", "General");
+    settings.Add("EndCredits", true, "End credits begins", "General");
 
-    settings.Add("Intro", true, "Intro Splits");
-    settings.Add("TitleVideo", true, "Title video ends", "Intro");
-    settings.Add("Base", false, "First time on base", "Intro");
-    settings.Add("Difficulty", false, "Difficulty chosen", "Intro");
+    var DungeonNames = new string[] { "Darkwood", "Anura", "Anchordeep", "Silk Cradle" };
+    var BossNames = new string[] { "Leshy", "Heket", "Kallamar", "Shamura" };
 
-    settings.Add("Darkwood", true, "Darkwood");
-    settings.Add("UnlockedDungeon1", false, "Darkwood unlocked", "Darkwood");
-    settings.Add("CompletedDungeon1", false, "Darkwood completed", "Darkwood");
-    settings.Add("BossEncounteredDungeon1", false, "Leshy encountered", "Darkwood");
-    settings.Add("BossDefeatedDungeon1", true, "Leshy defeated", "Darkwood");
-    settings.Add("EnterDungeon1", false, "Enter Darkwood", "Darkwood");
-    settings.Add("ExitDungeon1", false, "Exit Darkwood", "Darkwood");
+    for (int Index = 0; Index < 4; ++Index)
+    {
+        var Name = "Dungeon" + (Index + 1);
+        settings.Add(Name, true, DungeonNames[Index] + " splits");
+        settings.Add("Unlocked" + Name, false, DungeonNames[Index] + " entrance opened", Name);
+        settings.Add("Completed" + Name, false, BossNames[Index] + "'s room entrance opened", Name);
+        settings.Add("BossEncountered" + Name, false, "Begin " + BossNames[Index] + " battle for the first time", Name);
+        settings.Add("BossDefeated" + Name, true, BossNames[Index] + " defeated for the first time", Name);
+        settings.Add("FirstEnter" + Name, false, "First time entering " + DungeonNames[Index], Name);
+        settings.Add("Enter" + Name, false, "Each time entering " + DungeonNames[Index], Name);
+        settings.Add("Exit" + Name, false, "Each time leaving " + DungeonNames[Index], Name);
+    }
 
-    settings.Add("Anura", true, "Anura");
-    settings.Add("UnlockedDungeon2", false, "Anura unlocked", "Anura");
-    settings.Add("CompletedDungeon2", false, "Anura completed", "Anura");
-    settings.Add("BossEncounteredDungeon2", false, "Heket encountered", "Anura");
-    settings.Add("BossDefeatedDungeon2", true, "Heket defeated", "Anura");
-    settings.Add("EnterDungeon2", false, "Enter Anura", "Anura");
-    settings.Add("ExitDungeon2", false, "Exit Anura", "Anura");
+    settings.Add("TheGateway", false, "The Gateway splits");
+    settings.Add("TheOneWhoWaitsDefeated", false, "The One Who Waits defeated for the first time", "TheGateway");
+    settings.Add("FirstEnterDungeonFinal", false, "First time entering The Gateway", "TheGateway");
+    settings.Add("EnterDungeonFinal", false, "Each time entering The Gateway", "TheGateway");
+    settings.Add("ExitDungeonFinal", false, "Each time leaving The Gateway", "TheGateway");
 
-    settings.Add("Anchordeep", true, "Anchordeep");
-    settings.Add("UnlockedDungeon3", false, "Anchordeep unlocked", "Anchordeep");
-    settings.Add("CompletedDungeon3", false, "Anchordeep completed", "Anchordeep");
-    settings.Add("BossEncounteredDungeon3", false, "Kallamar encountered", "Anchordeep");
-    settings.Add("BossDefeatedDungeon3", true, "Kallamar defeated", "Anchordeep");
-    settings.Add("EnterDungeon3", false, "Enter Anchordeep", "Anchordeep");
-    settings.Add("ExitDungeon3", false, "Exit Anchordeep", "Anchordeep");
-
-    settings.Add("SilkCradle", true, "Silk Cradle");
-    settings.Add("UnlockedDungeon4", false, "Silk Cradle unlocked", "SilkCradle");
-    settings.Add("CompletedDungeon4", false, "Silk Cradle completed", "SilkCradle");
-    settings.Add("BossEncounteredDungeon4", false, "Shamura encountered", "SilkCradle");
-    settings.Add("BossDefeatedDungeon4", true, "Shamura defeated", "SilkCradle");
-    settings.Add("EnterDungeon4", false, "Enter Silk Cradle", "SilkCradle");
-    settings.Add("ExitDungeon4", false, "Exit Silk Cradle", "SilkCradle");
-
-    settings.Add("TheGateway", true, "The Gateway");
-    settings.Add("CrownReturned", true, "Crown returned", "TheGateway");
-    settings.Add("TheOneWhoWaitsDefeated", false, "The One Who Waits defeated", "TheGateway");
-    settings.Add("EnterDungeonFinal", false, "Enter The Gateway", "TheGateway");
-    settings.Add("ExitDungeonFinal", false, "Exit The Gateway", "TheGateway");
-
-    settings.Add("Fleeces", true, "Unlocked Fleeces Splits");
-
-    settings.Add("Fleece1", true, "Golden Fleece", "Fleeces");
+    settings.Add("Fleeces", false, "Fleece unlock splits");
+    settings.Add("Fleece1", false, "Golden Fleece", "Fleeces");
     settings.Add("Fleece2", false, "Fleece of the Glass Cannon", "Fleeces");
     settings.Add("Fleece3", false, "Fleece of the Diseased Heart", "Fleeces");
     settings.Add("Fleece4", false, "Fleece of the Fates", "Fleeces");
     settings.Add("Fleece5", false, "Fleece of the Fragile Fortitude", "Fleeces");
 
-    vars.Helper.AlertGameTime("Cult Of The Lamb");
+    vars.Helper.AlertLoadless("Cult Of The Lamb");
 }
 
 init
@@ -88,13 +69,18 @@ init
         vars.Helper["PlayerFleece"] = DataManager.Make<int>("instance", "PlayerFleece");
         vars.Helper["UnlockedFleeces"] = DataManager.MakeList<int>("instance", "UnlockedFleeces");
 
+        var LetterBox = mono.GetClass("LetterBox");
+        vars.Helper["LetterBoxVisible"] = LetterBox.Make<bool>("IsPlaying");
+
         return true;
     });
 
     vars.Helper.Load();
 
-    vars.CurrentScene = vars.Helper.Scenes.Active.Name;
-    vars.Locations = new Dictionary<int, int>{ { 1, 7 }, { 2, 8 }, { 3, 9 }, { 4, 10 } };
+    vars.Locations = new int[] { 7, 8, 9, 10 };
+    vars.FirstEnterDungeons = new HashSet<string>();
+
+    current.Scene = vars.Helper.Scenes.Active.Name;
 }
 
 update
@@ -102,92 +88,112 @@ update
     if (!vars.Helper.Update())
 		return false;
 
-    // Prevents scene splits while loading
-    if (!vars.Helper["IsLoading"].Current)
+    current.IsLoading = vars.Helper["IsLoading"].Current;
+    current.IsVideoCompleted = vars.Helper["IsVideoCompleted"].Current;
+
+    if (!current.IsLoading)
     {
-        vars.OldScene = vars.CurrentScene;
-        vars.CurrentScene = vars.Helper.Scenes.Active.Name;
+        // Prevents scene splits while loading
+        current.Scene = vars.Helper.Scenes.Active.Name;
     }
 }
 
 isLoading
 {
-    return !vars.Helper["IsVideoCompleted"].Current || (vars.Helper["IsLoading"].Current && vars.CurrentScene != "QuoteScreen");
+    return !current.IsVideoCompleted || (current.IsLoading && current.Scene != "QuoteScreen");
 }
 
 start
 {
-    return !vars.Helper["IsLoading"].Current && vars.CurrentScene == "Game Biome Intro";
+    if (!current.IsLoading && current.Scene == "Game Biome Intro")
+    {
+        vars.FirstEnterDungeons.Clear();
+        return true;
+    }
+
+    return false;
 }
 
 split
 {
-    if (vars.CurrentScene == "Main Menu")
-        return false;
-
     // Title video ends
-    if (settings["TitleVideo"] && !vars.Helper["IsVideoCompleted"].Old && vars.Helper["IsVideoCompleted"].Current)
+    if (settings["TitleVideo"] && !old.IsVideoCompleted && current.IsVideoCompleted)
         return true;
 
     // First time base visited
-    if (settings["Base"] && vars.CurrentScene == "Base Biome 1" && vars.OldScene != vars.CurrentScene && !vars.Helper["DifficultyChosen"].Current)
+    if (settings["CultBase"] && current.Scene == "Base Biome 1" && old.Scene != current.Scene && !vars.Helper["DifficultyChosen"].Current)
         return true;
 
     // Difficulty chosen
-    if (settings["Difficulty"] && !vars.Helper["DifficultyChosen"].Old && vars.Helper["DifficultyChosen"].Current)
+    if (settings["Difficulty"] && vars.Helper["DifficultyChosen"].Changed)
         return true;
+
+    // Helper method
+    var IsCollectionUnlocked = (Func<bool, dynamic, int, bool>)((value, collection, index) =>
+    {
+        return value && !collection.Old.Contains(index) && collection.Current.Contains(index);
+    });
 
     // Dungeons splits
-    for (var DungeonIndex = 1; DungeonIndex <= 4; ++DungeonIndex)
+    for (var Index = 0; Index < 4; ++Index)
     {
-        var DungeonName = "Dungeon" + DungeonIndex;
-        var Location = vars.Locations[DungeonIndex];
+        var Name = "Dungeon" + (Index + 1);
+        var Location = vars.Locations[Index];
 
-        // Dungeon unlocked
-        if (settings["Unlocked" + DungeonName] && !vars.Helper["UnlockedDungeonDoor"].Old.Contains(Location) && vars.Helper["UnlockedDungeonDoor"].Current.Contains(Location))
+        // Dungeon entrance opened
+        if (IsCollectionUnlocked(settings["Unlocked" + Name], vars.Helper["UnlockedDungeonDoor"], Location))
             return true;
 
-        // Dungeon completed
-        if (settings["Completed" + DungeonName] && !vars.Helper["UnlockedBossTempleDoor"].Old.Contains(Location) && vars.Helper["UnlockedBossTempleDoor"].Current.Contains(Location))
+        // Dungeon boss room entrance opened
+        if (IsCollectionUnlocked(settings["Completed" + Name], vars.Helper["UnlockedBossTempleDoor"], Location))
             return true;
 
-        // Dungeon boss encountered
-        if (settings["BossEncountered" + DungeonName] && !vars.Helper["BossesEncountered"].Old.Contains(Location) && vars.Helper["BossesEncountered"].Current.Contains(Location))
+        // Begin dungeon boss battle for the first time
+        if (IsCollectionUnlocked(settings["BossEncountered" + Name], vars.Helper["BossesEncountered"], Location))
             return true;
 
-        // Dungeon boss defeated
-        if (settings["BossDefeated" + DungeonName] && !vars.Helper["BossesCompleted"].Old.Contains(Location) && vars.Helper["BossesCompleted"].Current.Contains(Location))
+        // Dungeon boss defeated for the first time
+        if (IsCollectionUnlocked(settings["BossDefeated" + Name], vars.Helper["BossesCompleted"], Location))
             return true;
 
-        // Dungeon enter
-        if (settings["Enter" + DungeonName] && vars.CurrentScene == DungeonName && vars.OldScene != vars.CurrentScene)
-            return true;
+        // Entering dungeon split
+        if (current.Scene == Name && current.Scene != old.Scene)
+        {
+            if (settings["Enter" + Name] || (settings["FirstEnter" + Name] && !vars.FirstEnterDungeons.Contains(Name)))
+            {
+                vars.FirstEnterDungeons.Add(Name);
+                return true;
+            }
+        }
 
-        // Dungeon exit
-        if (settings["Exit" + DungeonName] && vars.OldScene == DungeonName && vars.OldScene != vars.CurrentScene)
+        // Leaving dungeon split
+        if (settings["Exit" + Name] && old.Scene == Name && current.Scene != old.Scene)
             return true;
     }
-
-    // Kneeled before fial boss
-    if (settings["CrownReturned"] && vars.CurrentScene == "Credits" && vars.OldScene != vars.CurrentScene)
-        return true;
 
     // Final boss defeated
     if (settings["TheOneWhoWaitsDefeated"] && !vars.Helper["DeathCatBeaten"].Old && vars.Helper["DeathCatBeaten"].Current)
         return true;
 
-    // Final dungeon enter
-    if (settings["EnterDungeonFinal"] && vars.CurrentScene == "Dungeon Final" && vars.OldScene != vars.CurrentScene)
-        return true;
+    if (current.Scene != old.Scene)
+    {
+        // Credits scene shown
+        if (settings["EndCredits"] && current.Scene == "Credits")
+            return true;
 
-    // Final dungeon exit
-    if (settings["ExitDungeonFinal"] && vars.OldScene == "Dungeon Final" && vars.OldScene != vars.CurrentScene)
-        return true;
+        // Final dungeon enter
+        if (settings["EnterDungeonFinal"] && current.Scene == "Dungeon Final")
+            return true;
+
+        // Final dungeon exit
+        if (settings["ExitDungeonFinal"] && old.Scene == "Dungeon Final")
+            return true;
+    }
 
     // Fleeces
-    for (var FleeceIndex = 1; FleeceIndex <= 5; ++FleeceIndex)
+    for (var Index = 1; Index <= 5; ++Index)
     {
-        if (settings["Fleece" + FleeceIndex] && !vars.Helper["UnlockedFleeces"].Old.Contains(FleeceIndex) && vars.Helper["UnlockedFleeces"].Current.Contains(FleeceIndex))
+        if (IsCollectionUnlocked(settings["Fleece" + Index], vars.Helper["UnlockedFleeces"], Index))
             return true;
     }
 
@@ -196,7 +202,13 @@ split
 
 reset
 {
-    return vars.CurrentScene == "Main Menu";
+    if (current.Scene == "Main Menu")
+    {
+        vars.FirstEnterDungeons.Clear();
+        return true;
+    }
+
+    return false;
 }
 
 exit
