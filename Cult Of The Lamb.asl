@@ -2,6 +2,10 @@ state("Cult Of The Lamb")
 {
 }
 
+state("Cult Of The Lamb", "Demo")
+{
+}
+
 startup
 {
     var bytes = File.ReadAllBytes(@"Components\LiveSplit.ASLHelper.bin");
@@ -16,6 +20,10 @@ startup
     settings.Add("CultBase", true, "Entering Base for the first time", "General");
     settings.Add("Difficulty", false, "Game difficulty chosen", "General");
     settings.Add("EndCredits", true, "End credits begins", "General");
+
+    settings.Add("Demo", false, "Demo version splits");
+    settings.Add("BeatMiniBoss", false, "First Darkwood mini boss defeated", "Demo");
+    settings.Add("DemoOver", false, "Demo complete screen shown up", "Demo");
 
     var DungeonNames = new string[] { "Darkwood", "Anura", "Anchordeep", "Silk Cradle" };
     var BossNames = new string[] { "Leshy", "Heket", "Kallamar", "Shamura" };
@@ -53,86 +61,95 @@ init
 {
     vars.Helper.TryOnLoad = (Func<dynamic, bool>)(mono =>
     {
+        var CheatConsole = mono.GetClass("CheatConsole");
+        vars.Helper["InDemo"] = CheatConsole.Make<bool>("_inDemo");
+
+        // 0x10 - offset of m_CachedPtr field
+        // 0x39 - offset of active flag in native object
         var MMTransition = mono.GetClass("MMTools.MMTransition");
-        vars.Helper["IsLoading"] = MMTransition.Make<bool>("IsPlaying");
+        vars.Helper["IsInTransition"] = MMTransition.Make<bool>("IsPlaying");
+        vars.Helper["IsLoadingIconActive"] = MMTransition.Make<byte>("mmTransition", "loadingIcon", 0x10, 0x39);
 
         var MMVideoPlayer = mono.GetClass("MMTools.MMVideoPlayer");
         vars.Helper["IsVideoCompleted"] = MMVideoPlayer.Make<bool>("mmVideoPlayer", "completed");
 
         var DataManager = mono.GetClass("DataManager");
-        vars.Helper["DifficultyChosen"] = DataManager.Make<bool>("instance", "DifficultyChosen");
+        vars.Helper["IsDifficultyChosen"] = DataManager.Make<bool>("instance", "DifficultyChosen");
         vars.Helper["UnlockedBossTempleDoor"] = DataManager.MakeList<int>("instance", "UnlockedBossTempleDoor");
         vars.Helper["UnlockedDungeonDoor"] = DataManager.MakeList<int>("instance", "UnlockedDungeonDoor");
         vars.Helper["BossesCompleted"] = DataManager.MakeList<int>("instance", "BossesCompleted");
         vars.Helper["BossesEncountered"] = DataManager.MakeList<int>("instance", "BossesEncountered");
-        vars.Helper["DeathCatBeaten"] = DataManager.Make<bool>("instance", "DeathCatBeaten");
+        vars.Helper["IsDeathCatBeaten"] = DataManager.Make<bool>("instance", "DeathCatBeaten");
         vars.Helper["PlayerFleece"] = DataManager.Make<int>("instance", "PlayerFleece");
         vars.Helper["UnlockedFleeces"] = DataManager.MakeList<int>("instance", "UnlockedFleeces");
-
-        var LetterBox = mono.GetClass("LetterBox");
-        vars.Helper["LetterBoxVisible"] = LetterBox.Make<bool>("IsPlaying");
+        vars.Helper["OnboardingPhase"] = DataManager.Make<int>("instance", "CurrentOnboardingPhase");
+        vars.Helper["IsFirstMiniBossBeaten"] = DataManager.Make<bool>("instance", "BeatenFirstMiniBoss");
 
         return true;
     });
 
     vars.Helper.Load();
 
+    if (vars.Helper.Loaded && vars.Helper["InDemo"].Current)
+        version = "Demo";
+
     vars.Locations = new int[] { 7, 8, 9, 10 };
-    vars.FirstEnterDungeons = new HashSet<string>();
+    vars.CompletedSplits = new HashSet<string>();
 
     current.Scene = vars.Helper.Scenes.Active.Name;
+    current.IsVideoPlaying = false;
+    current.IsLoading = true;
 }
 
 update
 {
-    if (!vars.Helper.Update())
+    if (!vars.Helper.Loaded || !vars.Helper.Update())
         return false;
 
-    current.IsLoading = vars.Helper["IsLoading"].Current;
-    current.IsVideoCompleted = vars.Helper["IsVideoCompleted"].Current;
-
-    if (!current.IsLoading)
-    {
-        // Prevents scene splits while loading
-        current.Scene = vars.Helper.Scenes.Active.Name;
-    }
+    current.Scene = vars.Helper.Scenes.Active.Name;
+    current.IsVideoPlaying = !vars.Helper["IsVideoCompleted"].Current;
+    current.IsLoading = current.IsVideoPlaying
+        || vars.Helper["IsLoadingIconActive"].Current > 0
+        || current.Scene == "BufferScene"
+        || current.Scene == "QuoteScreen"
+        || String.IsNullOrEmpty(current.Scene);
 }
 
 isLoading
 {
-    return !current.IsVideoCompleted || (current.IsLoading && current.Scene != "QuoteScreen");
+    return current.IsLoading;
 }
 
 start
 {
-    if (!current.IsLoading && current.Scene == "Game Biome Intro")
-    {
-        vars.FirstEnterDungeons.Clear();
-        return true;
-    }
+    return !current.IsLoading && current.Scene == "Game Biome Intro";
+}
 
-    return false;
+onStart
+{
+	timer.IsGameTimePaused = true;
+	vars.CompletedSplits.Clear();
 }
 
 split
 {
     // Title video ends
-    if (settings["TitleVideo"] && !old.IsVideoCompleted && current.IsVideoCompleted)
+    if (settings["TitleVideo"] && old.IsVideoPlaying && !current.IsVideoPlaying)
         return true;
 
     // First time base visited
-    if (settings["CultBase"] && current.Scene == "Base Biome 1" && old.Scene != current.Scene && !vars.Helper["DifficultyChosen"].Current)
+    if (settings["CultBase"] && vars.Helper["OnboardingPhase"].Current == 1 && vars.Helper["OnboardingPhase"].Old != 1)
         return true;
 
     // Difficulty chosen
-    if (settings["Difficulty"] && vars.Helper["DifficultyChosen"].Changed)
+    if (settings["Difficulty"] && vars.Helper["IsDifficultyChosen"].Changed)
         return true;
 
     // Helper method
-    var IsCollectionUnlocked = (Func<bool, dynamic, int, bool>)((value, collection, index) =>
+    Func<bool, dynamic, int, bool> IsCollectionUnlocked = (value, collection, index) =>
     {
         return value && !collection.Old.Contains(index) && collection.Current.Contains(index);
-    });
+    };
 
     // Dungeons splits
     for (var Index = 0; Index < 4; ++Index)
@@ -159,9 +176,9 @@ split
         // Entering dungeon split
         if (current.Scene == Name && current.Scene != old.Scene)
         {
-            if (settings["Enter" + Name] || (settings["FirstEnter" + Name] && !vars.FirstEnterDungeons.Contains(Name)))
+            if (settings["Enter" + Name] || (settings["FirstEnter" + Name] && !vars.CompletedSplits.Contains(Name)))
             {
-                vars.FirstEnterDungeons.Add(Name);
+                vars.CompletedSplits.Add(Name);
                 return true;
             }
         }
@@ -171,14 +188,21 @@ split
             return true;
     }
 
+    // First mini boss defeated
+    if (settings["BeatMiniBoss"] && vars.Helper["IsFirstMiniBossBeaten"].Changed)
+        return true;
+
     // Final boss defeated
-    if (settings["TheOneWhoWaitsDefeated"] && !vars.Helper["DeathCatBeaten"].Old && vars.Helper["DeathCatBeaten"].Current)
+    if (settings["TheOneWhoWaitsDefeated"] && vars.Helper["IsDeathCatBeaten"].Changed)
         return true;
 
     if (current.Scene != old.Scene)
     {
         // Credits scene shown
         if (settings["EndCredits"] && current.Scene == "Credits")
+            return true;
+
+        if (settings["DemoOver"] && current.Scene == "DemoOver")
             return true;
 
         // Final dungeon enter
@@ -202,13 +226,7 @@ split
 
 reset
 {
-    if (current.Scene == "Main Menu")
-    {
-        vars.FirstEnterDungeons.Clear();
-        return true;
-    }
-
-    return false;
+    return current.Scene == "Main Menu";
 }
 
 exit
