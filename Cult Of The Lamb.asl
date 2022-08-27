@@ -19,7 +19,7 @@ startup
     settings.Add("TitleVideo", false, "Title video ends", "General");
     settings.Add("CultBase", true, "Entering Base for the first time", "General");
     settings.Add("Difficulty", false, "Game difficulty chosen", "General");
-    settings.Add("EndCredits", true, "End credits begins", "General");
+    settings.Add("EndCredits", false, "End credits begins", "General");
 
     settings.Add("Demo", false, "Demo version splits");
     settings.Add("BeatMiniBoss", false, "First Darkwood mini boss defeated", "Demo");
@@ -41,7 +41,9 @@ startup
         settings.Add("Exit" + Name, false, "Each time leaving " + DungeonNames[Index], Name);
     }
 
-    settings.Add("TheGateway", false, "The Gateway splits");
+    settings.Add("TheGateway", true, "The Gateway splits");
+    settings.Add("AcceptKneel", true, "Kneel before The One Who Waits", "TheGateway");
+    settings.Add("RefuseKneel", false, "Refuse to kneel before Crown to The One Who Waits", "TheGateway");
     settings.Add("TheOneWhoWaitsDefeated", false, "The One Who Waits defeated for the first time", "TheGateway");
     settings.Add("FirstEnterDungeonFinal", false, "First time entering The Gateway", "TheGateway");
     settings.Add("EnterDungeonFinal", false, "Each time entering The Gateway", "TheGateway");
@@ -55,6 +57,9 @@ startup
     settings.Add("Fleece5", false, "Fleece of the Fragile Fortitude", "Fleeces");
 
     vars.Helper.AlertLoadless("Cult Of The Lamb");
+
+    vars.Locations = new int[] { 7, 8, 9, 10 };
+    vars.CompletedSplits = new HashSet<string>();
 }
 
 init
@@ -85,6 +90,26 @@ init
         vars.Helper["OnboardingPhase"] = DataManager.Make<int>("instance", "CurrentOnboardingPhase");
         vars.Helper["IsFirstMiniBossBeaten"] = DataManager.Make<bool>("instance", "BeatenFirstMiniBoss");
 
+        var PlayerFarming = mono.GetClass("PlayerFarming");
+        vars.Helper["PlayerFarming"] = PlayerFarming.Make<IntPtr>("Instance");
+
+        var SkeletonAnimation = mono.GetClass("spine-unity", "Spine.Unity.SkeletonAnimation");
+        var AnimationState = mono.GetClass("spine-unity", "Spine.AnimationState");
+        var ExposedList = mono.GetClass("spine-unity", "Spine.ExposedList`1");
+        vars.Helper["AnimationTracks"] = PlayerFarming.MakeArray<IntPtr>("Instance", "Spine", SkeletonAnimation["state"], AnimationState["tracks"], ExposedList["Items"]);
+
+        var TrackEntry = mono.GetClass("spine-unity", "Spine.TrackEntry");
+        var Animation = mono.GetClass("spine-unity", "Spine.Animation");
+        vars.GetCurrentAnimation = (Func<string>)(() =>
+        {
+            if (vars.Helper["AnimationTracks"].Current.Length > 0)
+            {
+                var AnimationPtr = vars.Helper.Read<IntPtr>(vars.Helper["AnimationTracks"].Current[0] + TrackEntry["animation"]);
+                return vars.Helper.ReadString(AnimationPtr + Animation["name"]);
+            }
+            return String.Empty;
+        });
+
         return true;
     });
 
@@ -93,10 +118,8 @@ init
     if (vars.Helper.Loaded && vars.Helper["InDemo"].Current)
         version = "Demo";
 
-    vars.Locations = new int[] { 7, 8, 9, 10 };
-    vars.CompletedSplits = new HashSet<string>();
-
     current.Scene = vars.Helper.Scenes.Active.Name;
+    current.Animation = "idle";
     current.IsVideoPlaying = false;
     current.IsLoading = true;
 }
@@ -107,11 +130,10 @@ update
         return false;
 
     current.Scene = vars.Helper.Scenes.Active.Name;
+    current.Animation = vars.GetCurrentAnimation();
     current.IsVideoPlaying = !vars.Helper["IsVideoCompleted"].Current;
-    current.IsLoading = current.IsVideoPlaying
-        || vars.Helper["IsLoadingIconActive"].Current > 0
+    current.IsLoading = vars.Helper["IsLoadingIconActive"].Current > 0
         || current.Scene == "BufferScene"
-        || current.Scene == "QuoteScreen"
         || String.IsNullOrEmpty(current.Scene);
 }
 
@@ -122,7 +144,7 @@ isLoading
 
 start
 {
-    return !current.IsLoading && current.Scene == "Game Biome Intro";
+    return !current.IsLoading && current.Scene == "QuoteScreen";
 }
 
 onStart
@@ -195,6 +217,17 @@ split
     // Final boss defeated
     if (settings["TheOneWhoWaitsDefeated"] && vars.Helper["IsDeathCatBeaten"].Changed)
         return true;
+
+    if (current.Animation != old.Animation)
+    {
+        // Kneel before final boss
+        if (settings["AcceptKneel"] && current.Animation == "final-boss/kneel")
+            return true;
+
+        // Refuse to kneel before final boss
+        if (settings["RefuseKneel"] && current.Animation == "final-boss/refuse")
+            return true;
+    }
 
     if (current.Scene != old.Scene)
     {
