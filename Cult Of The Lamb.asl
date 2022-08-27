@@ -2,10 +2,6 @@ state("Cult Of The Lamb")
 {
 }
 
-state("Cult Of The Lamb", "Demo")
-{
-}
-
 startup
 {
     var bytes = File.ReadAllBytes(@"Components\LiveSplit.ASLHelper.bin");
@@ -115,9 +111,7 @@ init
 
     vars.Helper.Load();
 
-    if (vars.Helper.Loaded && vars.Helper["InDemo"].Current)
-        version = "Demo";
-
+    current.InDemo = false;
     current.Scene = vars.Helper.Scenes.Active.Name;
     current.Animation = "idle";
     current.IsVideoPlaying = false;
@@ -129,6 +123,7 @@ update
     if (!vars.Helper.Loaded || !vars.Helper.Update())
         return false;
 
+    current.InDemo = vars.Helper["InDemo"].Current;
     current.Scene = vars.Helper.Scenes.Active.Name;
     current.Animation = vars.GetCurrentAnimation();
     current.IsVideoPlaying = !vars.Helper["IsVideoCompleted"].Current;
@@ -144,7 +139,7 @@ isLoading
 
 start
 {
-    return !current.IsLoading && current.Scene == "QuoteScreen";
+    return !current.IsLoading && current.Scene == (current.InDemo ? "Game Biome Intro" : "QuoteScreen");
 }
 
 onStart
