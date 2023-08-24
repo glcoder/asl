@@ -51,6 +51,10 @@ startup
     settings.Add("Fleece3", false, "Fleece of the Diseased Heart", "Fleeces");
     settings.Add("Fleece4", false, "Fleece of the Fates", "Fleeces");
     settings.Add("Fleece5", false, "Fleece of the Fragile Fortitude", "Fleeces");
+    settings.Add("Fleece6", false, "Fleece of a Cursed Crusade", "Fleeces");
+    settings.Add("Fleece7", false, "Fleece of the Berserker", "Fleeces");
+    settings.Add("Fleece8", false, "Fleece of Fervour's Favour", "Fleeces");
+    settings.Add("Fleece9", false, "Fleece of the Hobbled Heels", "Fleeces");
 
     vars.Helper.AlertLoadless("Cult Of The Lamb");
 
@@ -248,7 +252,7 @@ split
     }
 
     // Fleeces
-    for (var Index = 1; Index <= 5; ++Index)
+    for (var Index = 1; Index < 10; ++Index)
     {
         if (IsCollectionUnlocked(settings["Fleece" + Index], vars.Helper["UnlockedFleeces"], Index))
             return true;
