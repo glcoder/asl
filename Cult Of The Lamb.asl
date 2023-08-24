@@ -139,7 +139,12 @@ isLoading
 
 start
 {
-    return !current.IsLoading && current.Scene == (current.InDemo ? "Game Biome Intro" : "QuoteScreen");
+    if (current.IsLoading)
+        return false;
+
+    return current.InDemo
+        ? current.Scene == "Game Biome Intro"
+        : current.Scene == "QuoteScreen" || current.Scene == "Base Biome 1";
 }
 
 onStart
