@@ -55,6 +55,7 @@ startup
     settings.Add("Fleece7", false, "Fleece of the Berserker", "Fleeces");
     settings.Add("Fleece8", false, "Fleece of Fervour's Favour", "Fleeces");
     settings.Add("Fleece9", false, "Fleece of the Hobbled Heels", "Fleeces");
+    settings.Add("GodOfDeathFleece", false, "God of Death Fleece", "Fleeces");
 
     vars.Helper.AlertLoadless("Cult Of The Lamb");
 
@@ -257,6 +258,10 @@ split
         if (IsCollectionUnlocked(settings["Fleece" + Index], vars.Helper["UnlockedFleeces"], Index))
             return true;
     }
+
+    // God Of Death fleece
+    if (IsCollectionUnlocked(settings["GodOfDeathFleece"], vars.Helper["UnlockedFleeces"], 1000))
+        return true;
 
     return false;
 }
